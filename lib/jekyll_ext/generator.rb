@@ -11,8 +11,8 @@ module Jekyll
     private
 
     def setup_lily_images_directory
-      system("rm", "-rf", "lily_images/")
-      system("mkdir", "lily_images/")
+#      system("rm", "-rf", "lily_images/")
+#     system("mkdir", "lily_images/")
     end
 
     def remove_stale_lily_image_references(site)

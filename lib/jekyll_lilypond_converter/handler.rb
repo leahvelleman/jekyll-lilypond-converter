@@ -12,8 +12,11 @@ module JekyllLilyPondConverter
       ensure_valid_image_format
 
       lilies.each do |lily|
-        write_lily_code_file(lily)
-        generate_lily_image(lily)
+        unless File.exist?("lily_images/" + lily.image_filename)
+          puts("Regenerating #{lily.code_filename}")
+          write_lily_code_file(lily)
+          generate_lily_image(lily)
+        end
         add_lily_image_to_site(lily)
         replace_snippet_with_image_link(lily)
       end
@@ -31,18 +34,24 @@ module JekyllLilyPondConverter
 
     def write_lily_code_file(lily)
       open(lily.code_filename, 'w') do |code_file|
-        code_file.puts(lily.code)
+        code_file.puts(preamble+lily.code+postamble)
       end
     end
 
     def generate_lily_image(lily)
-      system("lilypond", lilypond_output_format_option, lily.code_filename)
+      system("lilypond", "-dresolution=600", lilypond_output_format_option, lily.code_filename)
+      system("timidity", lily.midi_filename, "-Ow", "-o", lily.audio_filename)
+      system("mv", lily.code_filename, "lily_images/")
       system("mv", lily.image_filename, "lily_images/")
-      system("rm", lily.code_filename)
+      system("mv", lily.midi_filename, "lily_images/")
+      system("mv", lily.audio_filename, "lily_images/")
     end
 
     def add_lily_image_to_site(lily)
+      site_manager.add_image(static_file_builder, lily.code_filename)
       site_manager.add_image(static_file_builder, lily.image_filename)
+      site_manager.add_image(static_file_builder, lily.midi_filename)
+      site_manager.add_image(static_file_builder, lily.audio_filename)
     end
 
     def replace_snippet_with_image_link(lily)
@@ -51,12 +60,52 @@ module JekyllLilyPondConverter
 
     def lilies
       lily_snippets.map do |snippet|
-        Lily.new(naming_policy.generate_name, image_format, snippet)
+        Lily.new(naming_policy.generate_name(snippet), image_format, snippet)
       end
     end
 
     def lily_snippets
       content.scan(/```lilypond.+?```\n/m)
+    end
+
+    def preamble
+      """
+\\version \"2.20.0\"
+#(set-global-staff-size 18)
+\\include \"fasola.ily\"
+\\paper{
+    indent=0\\mm
+    #(define dump-extents #t)
+    page-breaking = #ly:one-line-auto-height-breaking
+    paper-width = 4\\in
+    left-margin = 3\\mm
+    right-margin = 3\\mm
+    top-margin = 3\\mm
+    bottom-margin = 3\\mm
+    oddHeaderMarkup = ##f
+    evenHeaderMarkup = ##f
+    oddFooterMarkup = ##f
+    evenFooterMarkup = ##f
+    ragged-right = ##t
+    system-count = #1
+}
+\\score {
+      """
+    end
+
+    def postamble
+      """
+  \\layout {
+    \\context {
+      \\Lyrics
+      \\override LyricText #'font-name = \"Times New Roman,\"
+    }
+  }
+  \\midi { 
+    \\tempo 4 = 160
+  }
+}
+      """
     end
 
     def lilypond_output_format_option
